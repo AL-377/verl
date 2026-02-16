@@ -48,7 +48,7 @@ class SingleTurnAgentLoop(AgentLoopBase):
         # 2. apply chat template and tokenize
         prompt_ids = await self.apply_chat_template(
             messages,
-            tools=self.tool_schemas,
+            tools=self.tool_schemas or None,
             images=images,
             videos=videos,
         )
