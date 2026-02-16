@@ -24,7 +24,7 @@ from split_monkey_patch import fit
 from verl import DataProto
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 from verl.trainer.ppo.utils import need_reference_policy
-from verl.utils.reward_score import gsm8k, math_reward
+from verl.utils.reward_score import gsm8k, math_reward, riddle
 
 
 def _select_rm_score_fn(data_source):
@@ -32,6 +32,8 @@ def _select_rm_score_fn(data_source):
         return gsm8k.compute_score
     elif data_source == "lighteval/MATH":
         return math_reward.compute_score
+    elif data_source == "metaphor_riddle":
+        return riddle.compute_score
     else:
         raise NotImplementedError
 
