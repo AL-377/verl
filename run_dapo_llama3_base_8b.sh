@@ -121,7 +121,7 @@ python3 -m recipe.dapo.main_dapo \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
-    +actor_rollout_ref.actor.checkpoint.contents.save='[model,optimizer,extra,hf_model]' \
+    +actor_rollout_ref.actor.checkpoint.save_contents='[model,optimizer,extra,hf_model]' \
     reward_model.reward_manager=dapo \
     +reward.reward_kwargs.overlong_buffer_cfg.enable=${enable_overlong_buffer} \
     +reward.reward_kwargs.overlong_buffer_cfg.len=${overlong_buffer_len} \
