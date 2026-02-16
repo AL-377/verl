@@ -24,15 +24,16 @@ loss_agg_mode="token-mean"
 
 enable_filter_groups=True
 filter_groups_metric=acc
-max_num_gen_batches=10
-train_prompt_bsz=32
+max_num_gen_batches=3
+train_prompt_bsz=16
 gen_prompt_bsz=$((train_prompt_bsz * 3))
 n_resp_per_prompt=16
-train_prompt_mini_bsz=32
+train_prompt_mini_bsz=1
 
-MODEL_PATH=/mnt/hdfs/ljt_save/models/DeepSeek-R1-Distill-Llama-8B/6a6f4aa4197940add57724a7707d069478df56b1
-TRAIN_FILE=/opt/tiger/verl/data/riddle_train_verl_compat.parquet
-TEST_FILE=/opt/tiger/verl/data/riddle_train_verl_compat.parquet
+# MODEL_PATH=/mnt/hdfs/ljt_save/models/DeepSeek-R1-Distill-Llama-8B/6a6f4aa4197940add57724a7707d069478df56b1
+MODEL_PATH=/mnt/hdfs/ljt_save/models/Llama-31-8b-ins/0e9e39f249a16976918f6564b8830bc894c89659
+TRAIN_FILE=/opt/tiger/verl/data/train_verl_compat_add_think.parquet
+TEST_FILE=/opt/tiger/verl/data/train_verl_compat_add_think.parquet
 NNODES=1
 
 # Ray
@@ -62,10 +63,7 @@ infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) / sp_size))
 offload=True
 gen_tp=1
 
-ray job submit --no-wait --runtime-env="${RUNTIME_ENV}" \
-    --working-dir "${WORKING_DIR}" \
-    --address "${RAY_ADDRESS}" \
-    -- python3 -m recipe.dapo.main_dapo \
+python3 -m recipe.dapo.main_dapo \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILE}" \
     data.prompt_key=prompt \
@@ -105,6 +103,7 @@ ray job submit --no-wait --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
+    actor_rollout_ref.rollout.enforce_eager=True \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.80 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
@@ -122,15 +121,18 @@ ray job submit --no-wait --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
     reward_model.reward_manager=dapo \
-    reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
-    reward_model.overlong_buffer.len=${overlong_buffer_len} \
-    reward_model.overlong_buffer.penalty_factor=${overlong_penalty_factor} \
+    +reward.reward_kwargs.overlong_buffer_cfg.enable=${enable_overlong_buffer} \
+    +reward.reward_kwargs.overlong_buffer_cfg.len=${overlong_buffer_len} \
+    +reward.reward_kwargs.overlong_buffer_cfg.penalty_factor=${overlong_penalty_factor} \
+    +reward.reward_kwargs.overlong_buffer_cfg.log=True \
+    +reward.reward_kwargs.max_resp_len=${max_response_length} \
+    actor_rollout_ref.rollout.max_model_len=$((max_prompt_length + max_response_length)) \
     trainer.logger='["console","swanlab"]' \
     trainer.project_name="${project_name}" \
     trainer.experiment_name="${exp_name}" \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     trainer.test_freq=5 \
     trainer.save_freq=5 \
     trainer.total_epochs=1 \

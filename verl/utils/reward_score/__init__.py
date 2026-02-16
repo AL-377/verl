@@ -102,6 +102,25 @@ def default_compute_score(
         from . import search_r1_like_qa_em
 
         res = search_r1_like_qa_em.compute_score(solution_str, ground_truth)
+    elif data_source in ["metaphor_riddle"]:
+        import asyncio
+
+        from . import riddle
+
+        # riddle.compute_score is async, need to run it in an event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # We're already inside an async context, create a new thread to run it
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                res = executor.submit(asyncio.run, riddle.compute_score(solution_str, ground_truth)).result()
+        else:
+            res = asyncio.run(riddle.compute_score(solution_str, ground_truth))
 
     else:
         raise NotImplementedError(f"Reward function is not implemented for {data_source=}")

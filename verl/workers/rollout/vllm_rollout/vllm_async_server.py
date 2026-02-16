@@ -225,7 +225,44 @@ class vLLMHttpServer:
         logger.info(f"override_generation_config: {override_generation_config}")
 
         logger.info(f"enable_sleep_mode: {self.config.enable_sleep_mode}")
-        if not self.config.enable_sleep_mode:
+
+        # Newer vLLM versions (with CuMemAllocator) use a custom memory pool
+        # that is incompatible with PyTorch's expandable_segments.
+        # See https://github.com/pytorch/pytorch/issues/147851
+        _has_cumem_allocator = False
+        try:
+            from vllm.device_allocator.cumem import CuMemAllocator  # noqa: F401
+
+            _has_cumem_allocator = True
+        except ImportError:
+            pass
+
+        if _has_cumem_allocator:
+            # Actively strip expandable_segments:True from PYTORCH_CUDA_ALLOC_CONF
+            # env var, in case it was set externally or by a prior call in this process.
+            # vLLM spawns worker subprocesses that inherit env vars, and CuMemAllocator
+            # asserts this is not set.
+            _alloc_conf = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
+            if "expandable_segments:True" in _alloc_conf:
+                _parts = [
+                    p.strip()
+                    for p in _alloc_conf.split(",")
+                    if p.strip() and "expandable_segments:True" not in p
+                ]
+                if _parts:
+                    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = ",".join(_parts)
+                else:
+                    os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+                logger.info(
+                    f"Removed expandable_segments:True from PYTORCH_CUDA_ALLOC_CONF. "
+                    f"Was: '{_alloc_conf}', now: '{os.environ.get('PYTORCH_CUDA_ALLOC_CONF', '')}'"
+                )
+            if not self.config.enable_sleep_mode:
+                logger.info(
+                    "Skipping set_expandable_segments(True) because vLLM CuMemAllocator "
+                    "is not compatible with expandable segments."
+                )
+        elif not self.config.enable_sleep_mode:
             from verl.utils.device import set_expandable_segments
 
             set_expandable_segments(True)
