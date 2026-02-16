@@ -48,6 +48,7 @@ MODEL_PATH=${MODEL_PATH:-"${RAY_DATA_HOME}/models/Qwen2.5-32B"}
 CKPTS_DIR=/mnt/hdfs/ljt_save/models/${exp_name}
 TRAIN_FILE=${TRAIN_FILE:-"${RAY_DATA_HOME}/data/dapo-math-17k.parquet"}
 TEST_FILE=${TEST_FILE:-"${RAY_DATA_HOME}/data/aime-2024.parquet"}
+TRACES_DIR=/mnt/hdfs/ljt_save/models/${exp_name}/traces
 
 # Algorithm
 temperature=1.0
@@ -133,8 +134,9 @@ python3 -m recipe.dapo.main_dapo \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.val_before_train=False \
-    trainer.test_freq=1 \
-    trainer.save_freq=1 \
+    trainer.test_freq=5 \
+    trainer.save_freq=5 \
     trainer.total_epochs=500 \
     trainer.default_local_dir="${CKPTS_DIR}" \
-    trainer.resume_mode=auto
+    trainer.resume_mode=auto \
+    trainer.rollout_data_dir="${TRACES_DIR}"
