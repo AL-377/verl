@@ -68,7 +68,6 @@ gen_tp=1
 python3 -m recipe.dapo.main_dapo \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILE}" \
-    data.val_batch_size=128 \
     data.prompt_key=prompt \
     data.truncation='left' \
     data.max_prompt_length=${max_prompt_length} \
@@ -138,7 +137,7 @@ python3 -m recipe.dapo.main_dapo \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.val_before_train=False \
-    trainer.test_freq=5 \
+    trainer.test_freq=5000 \
     trainer.save_freq=5 \
     trainer.total_epochs=500 \
     trainer.default_local_dir="${CKPTS_DIR}" \
