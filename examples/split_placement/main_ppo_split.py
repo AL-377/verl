@@ -32,7 +32,7 @@ def _select_rm_score_fn(data_source):
         return gsm8k.compute_score
     elif data_source == "lighteval/MATH":
         return math_reward.compute_score
-    elif data_source == "metaphor_riddle":
+    elif "metaphor_riddle" in data_source:
         return riddle.compute_score
     else:
         raise NotImplementedError
