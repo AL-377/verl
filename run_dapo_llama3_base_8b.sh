@@ -2,14 +2,15 @@
 set -xeuo pipefail
 
 project_name='riddle-llama'
-exp_name='riddle-llama-8b-ins-ds'
+exp_name='riddle-llama-8b-ins-ds-on-policy-add-coef-seq-mean-token-mean'
 
 adv_estimator=grpo
 
 use_kl_in_reward=False
 kl_coef=0.0
-use_kl_loss=False
-kl_loss_coef=0.0
+use_kl_loss=True
+kl_loss_coef=0.02
+kl_loss_type=low_var_kl
 
 clip_ratio_low=0.2
 clip_ratio_high=0.28
@@ -20,7 +21,7 @@ enable_overlong_buffer=True
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
 
-loss_agg_mode="token-mean"
+loss_agg_mode="seq-mean-token-mean"
 
 enable_filter_groups=True
 filter_groups_metric=acc
@@ -28,7 +29,7 @@ max_num_gen_batches=3
 train_prompt_bsz=16
 gen_prompt_bsz=$((train_prompt_bsz * 3))
 n_resp_per_prompt=16
-train_prompt_mini_bsz=1
+train_prompt_mini_bsz=16
 
 # MODEL_PATH=/mnt/hdfs/ljt_save/models/DeepSeek-R1-Distill-Llama-8B/6a6f4aa4197940add57724a7707d069478df56b1
 MODEL_PATH=/mnt/hdfs/ljt_save/models/Llama-31-8b-ins/0e9e39f249a16976918f6564b8830bc894c89659
@@ -67,6 +68,7 @@ gen_tp=1
 python3 -m recipe.dapo.main_dapo \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILE}" \
+    data.val_batch_size=128 \
     data.prompt_key=prompt \
     data.truncation='left' \
     data.max_prompt_length=${max_prompt_length} \
@@ -79,9 +81,10 @@ python3 -m recipe.dapo.main_dapo \
     algorithm.kl_ctrl.kl_coef=${kl_coef} \
     actor_rollout_ref.actor.use_kl_loss=${use_kl_loss} \
     actor_rollout_ref.actor.kl_loss_coef=${kl_loss_coef} \
+    actor_rollout_ref.actor.kl_loss_type=${kl_loss_type} \
     actor_rollout_ref.actor.clip_ratio_low=${clip_ratio_low} \
     actor_rollout_ref.actor.clip_ratio_high=${clip_ratio_high} \
-    actor_rollout_ref.actor.clip_ratio_c=10.0 \
+    actor_rollout_ref.actor.clip_ratio_c=3.0 \
     algorithm.filter_groups.enable=${enable_filter_groups} \
     algorithm.filter_groups.max_num_gen_batches=${max_num_gen_batches} \
     algorithm.filter_groups.metric=${filter_groups_metric} \
@@ -94,13 +97,13 @@ python3 -m recipe.dapo.main_dapo \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
-    actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.actor.entropy_coeff=-0.001 \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
