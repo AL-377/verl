@@ -8,20 +8,20 @@ set -xeuo pipefail
 
 exp_name='riddle-llama-8b-ins-ds-on-policy-add-coef-seq-mean-token-mean'
 CKPTS_DIR=/mnt/hdfs/ljt_save/models/${exp_name}
-TEST_FILE=/opt/tiger/verl/data/eval_verl_compat_gpqa_mathv2.parquet
-TRAIN_FILE=/opt/tiger/verl/data/eval_verl_compat_gpqa_mathv2.parquet
+TEST_FILE=/opt/tiger/verl/data/eval_verl_only_gpqa_aime_puzzle.parquet
+TRAIN_FILE=/opt/tiger/verl/data/eval_verl_only_gpqa_aime_puzzle.parquet
 # validation 结果保存目录（每个 step 保存一个 jsonl）
-VAL_DATA_DIR=${CKPTS_DIR}/validation_data
+VAL_DATA_DIR=${CKPTS_DIR}/validation_data_only_aime_gpqa_puzzle
 # 你的原始模型路径（step 0 用）
 MODEL_PATH=/mnt/hdfs/ljt_save/models/Llama-31-8b-ins/0e9e39f249a16976918f6564b8830bc894c89659
 
 # 要评估的 step 列表：从 0 开始每隔 5 step
 # 根据你训到 44 step、save_freq=5，checkpoint 有: 5, 10, 15, 20, 25, 30, 35, 40
-STEPS=(50 90)
+STEPS=(0 50)
 
 # 评估用的参数
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 20))
+max_response_length=$((1024 * 32))
 sp_size=4
 gen_tp=1
 offload=True
