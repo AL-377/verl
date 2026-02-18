@@ -505,7 +505,69 @@ class RayPPOTrainer:
         sample_turns = []
         sample_uids = []
 
-        for test_data in self.val_dataloader:
+        # ---- Validation cache: resume from partial results ----
+        val_data_dir = self.config.trainer.get("validation_data_dir", None)
+        val_cache_file = None
+        cached_batch_count = 0
+        if val_data_dir:
+            os.makedirs(val_data_dir, exist_ok=True)
+            val_cache_file = os.path.join(val_data_dir, f"{self.global_steps}.jsonl")
+            if os.path.exists(val_cache_file):
+                # Load cached results and count how many batches were completed
+                with open(val_cache_file, "r") as f:
+                    cached_lines = [line.strip() for line in f if line.strip()]
+                if cached_lines:
+                    # Reconstruct collected data from cache
+                    for line in cached_lines:
+                        entry = json.loads(line)
+                        sample_inputs.append(entry["input"])
+                        sample_outputs.append(entry["output"])
+                        sample_gts.append(entry.get("gts"))
+                        sample_scores.append(entry["score"])
+                        sample_uids.append(entry.get("uid", str(uuid.uuid4())))
+                        if "data_source" in entry:
+                            data_source_lst.append(entry["data_source"])
+                        for k, v in entry.items():
+                            if k not in ("input", "output", "gts", "score", "step", "uid", "data_source"):
+                                reward_extra_infos_dict[k].append(v)
+                    reward_extra_infos_dict.setdefault("reward", list(sample_scores))
+                    # Figure out how many full batches were cached
+                    # We need val_batch_size * repeat_times samples per batch
+                    repeat_n = self.config.actor_rollout_ref.rollout.val_kwargs.n
+                    val_batch_size = self.val_dataloader.batch_size or len(self.val_dataset)
+                    samples_per_batch = val_batch_size * repeat_n
+                    cached_batch_count = len(cached_lines) // samples_per_batch
+                    # Only keep complete batches worth of cached data
+                    n_keep = cached_batch_count * samples_per_batch
+                    if n_keep < len(cached_lines):
+                        # Truncate to complete batches and rewrite cache file
+                        sample_inputs = sample_inputs[:n_keep]
+                        sample_outputs = sample_outputs[:n_keep]
+                        sample_gts = sample_gts[:n_keep]
+                        sample_scores = sample_scores[:n_keep]
+                        sample_uids = sample_uids[:n_keep]
+                        for k in reward_extra_infos_dict:
+                            reward_extra_infos_dict[k] = reward_extra_infos_dict[k][:n_keep]
+                        # Rewrite cache with only complete batches
+                        with open(val_cache_file, "w") as f:
+                            f.write("\n".join(cached_lines[:n_keep]) + "\n" if n_keep > 0 else "")
+                    # Rebuild data_source_lst as list of arrays (one per batch)
+                    if data_source_lst:
+                        flat_ds = data_source_lst
+                        data_source_lst = []
+                        for b in range(cached_batch_count):
+                            start = b * samples_per_batch
+                            end = start + samples_per_batch
+                            data_source_lst.append(np.array(flat_ds[start:end]))
+                    print(f"[val cache] Loaded {n_keep} samples ({cached_batch_count} batches) from {val_cache_file}")
+                else:
+                    cached_batch_count = 0
+
+        for batch_idx, test_data in enumerate(self.val_dataloader):
+            # Skip batches that are already cached
+            if batch_idx < cached_batch_count:
+                continue
+
             test_batch = DataProto.from_single_dict(test_data)
 
             if "uid" not in test_batch.non_tensor_batch:
@@ -590,10 +652,36 @@ class RayPPOTrainer:
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
 
+            # ---- Append this batch's results to cache file immediately ----
+            if val_cache_file:
+                batch_size_this = len(input_texts)
+                batch_entries = []
+                for i in range(batch_size_this):
+                    entry = {
+                        "input": input_texts[i],
+                        "output": output_texts[i],
+                        "gts": ground_truths[i],
+                        "score": scores[i],
+                        "step": self.global_steps,
+                        "uid": str(test_batch.non_tensor_batch["uid"][i]),
+                        "data_source": (
+                            test_batch.non_tensor_batch.get("data_source", ["unknown"] * batch_size_this)[i]
+                        ),
+                    }
+                    # Add reward_extra_info fields
+                    for k, v in reward_extra_info.items():
+                        if isinstance(v, np.ndarray):
+                            entry[k] = v[i].item() if hasattr(v[i], "item") else v[i]
+                        elif isinstance(v, list) and len(v) == batch_size_this:
+                            entry[k] = v[i]
+                    batch_entries.append(json.dumps(entry, ensure_ascii=False))
+                with open(val_cache_file, "a") as f:
+                    f.write("\n".join(batch_entries) + "\n")
+                print(f"[val cache] Appended batch {batch_idx} ({batch_size_this} samples) to {val_cache_file}")
+
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
-        # dump generations
-        val_data_dir = self.config.trainer.get("validation_data_dir", None)
+        # dump generations (full file, overwrite) — kept for backward compatibility
         if val_data_dir:
             self._dump_generations(
                 inputs=sample_inputs,

@@ -9,17 +9,18 @@ set -xeuo pipefail
 exp_name='riddle-llama-8b-ins-ds-on-policy-add-coef-seq-mean-token-mean'
 CKPTS_DIR=/mnt/hdfs/ljt_save/models/${exp_name}
 TEST_FILE=/opt/tiger/verl/data/eval_verl_compat_gpqa_mathv2.parquet
-TRAIN_FILE=/opt/tiger/verl/data/train_verl_compat_add_think.parquet
-
+TRAIN_FILE=/opt/tiger/verl/data/eval_verl_compat_gpqa_mathv2.parquet
+# validation 结果保存目录（每个 step 保存一个 jsonl）
+VAL_DATA_DIR=${CKPTS_DIR}/validation_data
 # 你的原始模型路径（step 0 用）
 MODEL_PATH=/mnt/hdfs/ljt_save/models/Llama-31-8b-ins/0e9e39f249a16976918f6564b8830bc894c89659
 
 # 要评估的 step 列表：从 0 开始每隔 5 step
 # 根据你训到 44 step、save_freq=5，checkpoint 有: 5, 10, 15, 20, 25, 30, 35, 40
-STEPS=(0 5 10 15 20 25 30 35 40)
+STEPS=(50 90)
 
 # 评估用的参数
-max_prompt_length=$((1024 * 2))
+max_prompt_length=$((1024 * 4))
 max_response_length=$((1024 * 20))
 sp_size=4
 gen_tp=1
@@ -56,7 +57,6 @@ for step in "${STEPS[@]}"; do
     python3 -m recipe.dapo.main_dapo \
         data.train_files="${TRAIN_FILE}" \
         data.val_files="${TEST_FILE}" \
-        data.val_batch_size=128 \
         data.prompt_key=prompt \
         data.truncation='left' \
         data.max_prompt_length=${max_prompt_length} \
@@ -90,7 +90,7 @@ for step in "${STEPS[@]}"; do
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
         actor_rollout_ref.rollout.enforce_eager=True \
-        actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+        actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
         actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
         actor_rollout_ref.rollout.enable_chunked_prefill=True \
         actor_rollout_ref.rollout.max_num_batched_tokens=$((max_prompt_length + max_response_length)) \
@@ -124,7 +124,9 @@ for step in "${STEPS[@]}"; do
         trainer.save_freq=9999 \
         trainer.total_epochs=1 \
         trainer.resume_mode="${RESUME_MODE}" \
-        trainer.default_local_dir="${CKPTS_DIR}/eval_tmp"
+        trainer.default_local_dir="${CKPTS_DIR}/eval_tmp" \
+        trainer.validation_data_dir="${VAL_DATA_DIR}/step_${step}" \
+        data.validation_shuffle=False
 
     echo "Step ${step} evaluation done."
 done
