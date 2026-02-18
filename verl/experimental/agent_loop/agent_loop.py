@@ -532,11 +532,18 @@ class AgentLoopWorker:
         #   e.g., [0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0,0,0,0]
 
         # TODO(wuxibin): remove padding and use tensordict.
+        # Truncate prompt_ids from the left if it exceeds prompt_length
+        prompt_length = self.config.actor_rollout_ref.rollout.prompt_length
+        if isinstance(output.prompt_ids, list) and len(output.prompt_ids) > prompt_length:
+            output.prompt_ids = output.prompt_ids[-prompt_length:]
+        elif isinstance(output.prompt_ids, torch.Tensor) and output.prompt_ids.shape[-1] > prompt_length:
+            output.prompt_ids = output.prompt_ids[..., -prompt_length:]
+
         self.tokenizer.padding_side = "left"
         prompt_output = self.tokenizer.pad(
             {"input_ids": output.prompt_ids},
             padding="max_length",
-            max_length=self.config.actor_rollout_ref.rollout.prompt_length,
+            max_length=prompt_length,
             return_tensors="pt",
             return_attention_mask=True,
         )
